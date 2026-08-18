@@ -19,6 +19,8 @@ html, body {
   color: var(--text);
   font-family: 'Inter', sans-serif;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -62,11 +64,12 @@ header.top {
 .top-inner {
   max-width: 980px;
   margin: 0 auto;
-  padding: 18px 22px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .brand-mark {
@@ -86,7 +89,7 @@ header.top {
 }
 .streak-pill svg { color: var(--muted); }
 
-main { max-width: 980px; margin: 0 auto; padding: 28px 22px 20px; display: flex; flex-direction: column; gap: 22px; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 18px 20px; display: flex; flex-direction: column; gap: 22px; width: 100%; }
 
 /* date nav / hero style */
 .datenav {
@@ -125,12 +128,15 @@ main { max-width: 980px; margin: 0 auto; padding: 28px 22px 20px; display: flex;
 .grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 18px;
+  gap: 16px;
 }
-@media (min-width: 900px) {
-  .grid { grid-template-columns: 3fr 2fr; }
+@media (min-width: 1000px) {
+  .grid { grid-template-columns: 3fr 2fr; gap: 20px; }
 }
-.col { display: flex; flex-direction: column; gap: 18px; }
+.col { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 1000px) {
+  .col { gap: 18px; }
+}
 
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -288,4 +294,44 @@ footer.bottom p { font-size: 10px; color: var(--muted-dim); letter-spacing: 0.06
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* ---------- responsive refinements: phones & small tablets ---------- */
+@media (max-width: 599px) {
+  .top-inner { padding: 14px 16px; }
+  .brand-name { font-size: 12px; }
+  main { padding: 18px 14px 16px; gap: 18px; }
+  .card { padding: 16px; }
+
+  /* keep inputs at 16px to stop iOS Safari auto-zooming on focus */
+  .text-input, textarea.note-input, input[type="time"], select.split-select { font-size: 16px; }
+
+  /* bigger touch targets */
+  .nav-btn { width: 40px; height: 40px; }
+  .checkbox { width: 20px; height: 20px; }
+  .add-btn { width: 40px; height: 40px; }
+  .item-row { padding: 10px 4px; }
+  .item-del { opacity: 1; padding: 4px; } /* no hover on touch devices, so always show */
+
+  .time-row { flex-direction: column; gap: 14px; }
+  .ring-card { flex-wrap: wrap; }
+
+  .login-screen { padding: 24px 20px; }
+  .login-title { font-size: clamp(36px, 12vw, 52px); }
+  .btn { width: 100%; text-align: center; }
+
+  .heatmap-scroll { -webkit-overflow-scrolling: touch; }
+  .streak-pill { font-size: 10px; }
+  .account-pill { max-width: 120px; }
+}
+
+/* tablets in portrait/landscape: roomier spacing, single column still until 1000px */
+@media (min-width: 600px) and (max-width: 999px) {
+  main { max-width: 720px; padding: 32px 28px 24px; }
+  .card { padding: 22px; }
+}
+
+/* laptop / desktop: comfortable max width, no changes needed beyond base */
+@media (min-width: 1000px) {
+  main { padding-top: 32px; }
 }
