@@ -1,9 +1,10 @@
-const CACHE = "logbook-v2";
+const CACHE = "logbook-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./firebase-init.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
@@ -25,6 +26,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  if (!e.request.url.startsWith(self.location.origin)) return; // let Firebase/CDN requests pass through untouched
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const network = fetch(e.request)

@@ -1,3 +1,5 @@
+import { watchAuth, signIn, logOut, subscribeData, pushData } from "./firebase-init.js";
+
 (function () {
   "use strict";
 
@@ -53,25 +55,34 @@
   var state = { habits: [], split: Object.assign({}, DEFAULT_SPLIT), days: {} };
   var today = new Date();
   var selected = new Date();
+  var currentUser = null;
+  var authReady = false;
+  var unsubscribeData = null;
+  var applyingRemote = false;
 
-  function load() {
+  function loadLocalFallback() {
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
+      var raw = localStorage.getItem(STORAGE_KEY + "-guest");
       if (raw) {
         var parsed = JSON.parse(raw);
         state.habits = parsed.habits || [];
         state.split = parsed.split || Object.assign({}, DEFAULT_SPLIT);
         state.days = parsed.days || {};
       }
-    } catch (e) { console.warn("could not load saved data", e); }
+    } catch (e) { console.warn("could not load local data", e); }
   }
 
   var saveTimer = null;
   function save() {
+    if (applyingRemote) return; // don't echo back a change we just received
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-      catch (e) { console.warn("could not save data", e); }
+      if (currentUser) {
+        pushData(currentUser.uid, state).catch(function (e) { console.error("sync failed", e); });
+      } else {
+        try { localStorage.setItem(STORAGE_KEY + "-guest", JSON.stringify(state)); }
+        catch (e) { console.warn("could not save local data", e); }
+      }
     }, 250);
   }
 
@@ -190,7 +201,34 @@
   // ---------- render ----------
   var $app = document.getElementById("app");
 
+  function renderLoginScreen() {
+    $app.innerHTML =
+      '<div class="login-screen">' +
+        '<div class="login-caption">CHENNAI, INDIA · LOGBOOK</div>' +
+        '<div class="login-title">Sign in<br/>to sync.</div>' +
+        '<div class="login-sub">Your habits, sleep &amp; notes, kept in sync across your phone, tablet and laptop.</div>' +
+        '<button class="btn btn-solid" id="google-signin-btn">Sign in with Google</button>' +
+        '<button class="login-guest" id="guest-btn">Continue without an account</button>' +
+      "</div>";
+    document.getElementById("google-signin-btn").addEventListener("click", function () {
+      signIn().catch(function (e) { console.error(e); alert("Sign-in failed: " + e.message); });
+    });
+    document.getElementById("guest-btn").addEventListener("click", function () {
+      currentUser = "guest";
+      loadLocalFallback();
+      render();
+    });
+  }
+
   function render() {
+    if (currentUser === null && !authReady) {
+      $app.innerHTML = '<div class="loading-screen">checking sign-in…</div>';
+      return;
+    }
+    if (currentUser === null) {
+      renderLoginScreen();
+      return;
+    }
     var key = toKey(selected);
     ensureSeeded(key, selected);
     var dayData = getDay(key);
@@ -252,7 +290,14 @@
             '<span class="brand-mark font-mono">//</span>' +
             '<span class="brand-name font-mono">nithin&nbsp;·&nbsp;logbook</span>' +
           "</div>" +
+          '<div class="header-right">' +
           '<div class="streak-pill">' + ICON_FLAME + " " + streak + " day" + (streak === 1 ? "" : "s") + "</div>" +
+          (currentUser && currentUser !== "guest"
+            ? '<button class="account-pill" id="signout-btn" title="Sign out">' + (currentUser.email || "account") + "</button>"
+            : currentUser === "guest"
+              ? '<button class="account-pill" id="signin-from-guest-btn">sign in to sync</button>'
+              : "") +
+          "</div>" +
         "</div></header>" +
 
         '<main>' +
@@ -348,6 +393,18 @@
   }
 
   function attachListeners(key) {
+    var signoutBtn = document.getElementById("signout-btn");
+    if (signoutBtn) signoutBtn.addEventListener("click", function () {
+      if (confirm("Sign out? Your data stays saved in the cloud.")) logOut();
+    });
+    var signinFromGuest = document.getElementById("signin-from-guest-btn");
+    if (signinFromGuest) signinFromGuest.addEventListener("click", function () {
+      currentUser = null;
+      authReady = false;
+      render();
+      signIn().catch(function (e) { console.error(e); alert("Sign-in failed: " + e.message); });
+    });
+
     $app.querySelectorAll("[data-action]").forEach(function (el) {
       var action = el.getAttribute("data-action");
       if (!action) return;
@@ -437,6 +494,31 @@
     }
   }
 
-  load();
-  render();
+  render(); // show "checking sign-in…" immediately
+
+  watchAuth(function (user) {
+    authReady = true;
+    if (unsubscribeData) { unsubscribeData(); unsubscribeData = null; }
+
+    if (user) {
+      currentUser = user;
+      unsubscribeData = subscribeData(user.uid, function (remoteState) {
+        applyingRemote = true;
+        if (remoteState) {
+          state.habits = remoteState.habits || [];
+          state.split = remoteState.split || Object.assign({}, DEFAULT_SPLIT);
+          state.days = remoteState.days || {};
+        } else {
+          // first time this account has signed in — push whatever's local (e.g. guest data)
+          pushData(user.uid, state).catch(function (e) { console.error(e); });
+        }
+        render();
+        applyingRemote = false;
+      });
+    } else {
+      currentUser = null;
+      state = { habits: [], split: Object.assign({}, DEFAULT_SPLIT), days: {} };
+      render();
+    }
+  });
 })();
