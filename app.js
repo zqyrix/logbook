@@ -165,34 +165,66 @@ import { watchAuth, signIn, logOut, subscribeData, pushData } from "./firebase-i
 
   // simple inline SVG line chart, no dependencies
   function renderSleepChart(data) {
-    var w = 300, h = 100, padL = 22, padR = 6, padT = 8, padB = 16;
-    var maxH = 10;
-    var xStep = (w - padL - padR) / (data.length - 1);
-    var points = [];
-    data.forEach(function (pt, i) {
-      if (pt.hours == null) return;
-      var x = padL + i * xStep;
-      var y = padT + (1 - pt.hours / maxH) * (h - padT - padB);
-      points.push([x, y, pt]);
+    var points = data
+      .map(function (pt, i) { return { i: i, pt: pt }; })
+      .filter(function (o) { return o.pt.hours != null; });
+
+    if (points.length === 0) {
+      return '<div class="chart-empty">log bedtime &amp; wake time to see your 14‑day sleep trend</div>';
+    }
+
+    var w = 600, h = 220, padL = 34, padR = 14, padT = 16, padB = 28;
+    var values = points.map(function (o) { return o.pt.hours; });
+    var rawMin = Math.min.apply(null, values);
+    var rawMax = Math.max.apply(null, values);
+    var minH = Math.max(0, Math.floor(rawMin) - 1);
+    var maxH = Math.min(14, Math.ceil(rawMax) + 1);
+    if (maxH - minH < 3) { maxH = minH + 3; } // avoid an overly flat line for narrow ranges
+    var range = maxH - minH;
+
+    var xStep = (w - padL - padR) / Math.max(1, data.length - 1);
+    var xy = points.map(function (o) {
+      var x = padL + o.i * xStep;
+      var y = padT + (1 - (o.pt.hours - minH) / range) * (h - padT - padB);
+      return { x: x, y: y, pt: o.pt };
     });
-    var pathD = points.map(function (p, i) { return (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
-    var gridLines = [0, 2.5, 5, 7.5, 10].map(function (v) {
-      var y = padT + (1 - v / maxH) * (h - padT - padB);
-      return '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y.toFixed(1) + '" stroke="#1F1F1F" stroke-width="1"/>';
+
+    var pathD = xy.map(function (p, i) { return (i === 0 ? "M" : "L") + p.x.toFixed(1) + " " + p.y.toFixed(1); }).join(" ");
+    var areaD = pathD +
+      " L " + xy[xy.length - 1].x.toFixed(1) + " " + (h - padB) +
+      " L " + xy[0].x.toFixed(1) + " " + (h - padB) + " Z";
+
+    var gridVals = [];
+    var stepCount = 4;
+    for (var g = 0; g <= stepCount; g++) gridVals.push(minH + (range / stepCount) * g);
+    var gridLines = gridVals.map(function (v) {
+      var y = padT + (1 - (v - minH) / range) * (h - padT - padB);
+      return (
+        '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y.toFixed(1) + '" stroke="#232323" stroke-width="1"/>' +
+        '<text x="' + (padL - 8) + '" y="' + (y + 3).toFixed(1) + '" font-size="10" fill="#666666" text-anchor="end" font-family="JetBrains Mono, monospace">' + Math.round(v) + "h</text>"
+      );
     }).join("");
-    var dots = points.map(function (p) {
-      return '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.2" fill="#FFFFFF"><title>' + p[2].label + ": " + p[2].hours + "h</title></circle>";
+
+    var dots = xy.map(function (p) {
+      return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3.4" fill="#000000" stroke="#FFFFFF" stroke-width="2"><title>' + p.pt.label + ": " + p.pt.hours + "h</title></circle>";
     }).join("");
-    var labelEvery = 4;
+
+    var labelEvery = Math.ceil(data.length / 6);
     var labels = data.map(function (pt, i) {
       if (i % labelEvery !== 0) return "";
       var x = padL + i * xStep;
-      return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" font-size="7" fill="#5C5C5C" text-anchor="middle" font-family="JetBrains Mono, monospace" letter-spacing="0.5">' + pt.label + "</text>";
+      return '<text x="' + x.toFixed(1) + '" y="' + (h - 6) + '" font-size="10" fill="#666666" text-anchor="middle" font-family="JetBrains Mono, monospace">' + pt.label + "</text>";
     }).join("");
+
     return (
-      '<svg viewBox="0 0 ' + w + " " + h + '" width="100%" height="110" preserveAspectRatio="none" style="overflow:visible">' +
+      '<svg viewBox="0 0 ' + w + " " + h + '" width="100%" height="180" preserveAspectRatio="xMidYMid meet">' +
+      '<defs><linearGradient id="sleepFill" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.16"/>' +
+      '<stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>' +
+      "</linearGradient></defs>" +
       gridLines +
-      '<path d="' + pathD + '" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<path d="' + areaD + '" fill="url(#sleepFill)" stroke="none"/>' +
+      '<path d="' + pathD + '" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>' +
       dots + labels +
       "</svg>"
     );
